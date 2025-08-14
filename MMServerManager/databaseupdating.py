@@ -1,16 +1,21 @@
-import sqlite3
 import time as pythontime
+from datetime import *
 from contextlib import closing
 import psycopg
 import os
 from dotenv import load_dotenv; load_dotenv("MMServerManager/db.env")
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', level=logging.DEBUG)
 
 """
 Helpful Links
 https://www.psycopg.org/psycopg3/docs/basic/usage.html
+https://www.geeksforgeeks.org/postgresql/postgresql-data-types/
 """
 
-def DBConnectionManager(func, MaxAttempts: int = 30):
+def DBConnectionManager(func):
     """
     REQUIREMENTS:
         - Database connection / present
@@ -21,8 +26,6 @@ def DBConnectionManager(func, MaxAttempts: int = 30):
             - cursor: to do fetch requests or inserts
 
     EXAMPLES:
-        DBConnection.cursor.execute(\<some SQL request\>)
-        pulledInfo = DBConnection.cursor.fetchmany(1000)
 
     WHEN TO USE DECORATOR:
         The decorator should be used whenever there is a new function call chain
@@ -30,28 +33,50 @@ def DBConnectionManager(func, MaxAttempts: int = 30):
         and the funciton calling the current function already have the DBConnection object-class
         then there is not need to add the @DBConnectionManager decroate to the function.
     """
-    """class CreateDBConnection:
-        def __init__(self, SQLDBConnection):
+    class CreateDBConnection:
+        def __init__(self, SQLDBConnection:psycopg.Connection):
             self.connection = SQLDBConnection
             self.cursor = SQLDBConnection.cursor()
     def wrapper(*args, **kwargs):
-        with closing(sqlite3.connect('EVEIntelligence.db')) as ActiveDBConnection:
-            Attempts = 0; result = None
-            while Attempts < MaxAttempts:
-                try:
-                    DBConnectionObject = CreateDBConnection(ActiveDBConnection)
-                    result = func(DBConnectionObject, *args, **kwargs)
-                    return(result)
-                except sqlite3.OperationalError: print(f"Database locked. Retry attempt {Attempts} of {MaxAttempts}"); Attempts += 1; pythontime.sleep(1)
-    return wrapper"""
-    return
+        with closing(psycopg.connect(dbname="MMServerManager", user="postgres", password=os.getenv('PASSWORD'), host="localhost")) as ActiveDBConnection:
+            result = None
+            DBConnectionObject = CreateDBConnection(ActiveDBConnection)
+            result = func(DBConnectionObject, *args, **kwargs)
+            return(result)
+    return wrapper
 
 #DBConnection = psycopg.connect(dbname="MMServerManager", user="postgres", password=os.getenv('PASSWORD'), host="locahost")
 
-with psycopg.connect(dbname="MMServerManager", user="postgres", password=os.getenv('PASSWORD'), host="localhost") as DBConnection:
-    with DBConnection.cursor() as DBCursor:
-        DBCursor.execute("""
-            CREATE TABLE ServerUsers (
-                UserID INTEGER PRIMARY KEY,
-                Username TEXT)
+@DBConnectionManager
+def UpdateActiveLastFromMessageSent(DBConnection, Message) -> None:
+    """
+    PURPOSE:
+        Updates the database's LastActive datetime for a user whenever they send a message.
+    """
+    DBConnection.cursor.execute(f"""
+        SELECT UserID
+        FROM ServerUsers
+        WHERE UserID = {Message.author.id}
+    """)
+    if DBConnection.cursor.fetchone() == None:
+        logging.info(f"Creating new database entries for {str(Message.author)} in ServerUsers")
+        DBQuery = ("""
+            INSERT INTO ServerUsers (UserID, UserName, LastActive)
+            VALUES (%s,%s,%s)
         """)
+        Values = [int(Message.author.id), str(Message.author), Message.created_at]
+        DBConnection.cursor.execute(DBQuery, Values)
+    else:
+        logging.info(f"Updating LastActive database entry for {Message.author} in ServerUsers")
+        DBQuery = (f"""
+            UPDATE ServerUsers
+            SET LastActive = %s
+            WHERE UserID = %s
+        """)
+        DBConnection.cursor.execute(DBQuery, [Message.created_at, Message.author.id])
+    DBConnection.connection.commit()
+
+    #MessageDatetime = Message.created_at
+    #DBConnection.cursor.execute("""UPDATE ServerUsers""")
+    #print(MessageDatetime)
+    return
