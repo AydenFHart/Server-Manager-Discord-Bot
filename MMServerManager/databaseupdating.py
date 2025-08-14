@@ -7,7 +7,7 @@ from dotenv import load_dotenv; load_dotenv("MMServerManager/db.env")
 
 """
 Helpful Links
-
+https://www.psycopg.org/psycopg3/docs/basic/usage.html
 """
 
 def DBConnectionManager(func, MaxAttempts: int = 30):
@@ -48,8 +48,8 @@ def DBConnectionManager(func, MaxAttempts: int = 30):
 
 #DBConnection = psycopg.connect(dbname="MMServerManager", user="postgres", password=os.getenv('PASSWORD'), host="locahost")
 
-with psycopg.connect(dbname="MMServerManager", user="postgres", password=os.getenv('PASSWORD'), host="locahost") as DBConnection:
-    with DBConnection.cursor as DBCursor:
+with psycopg.connect(dbname="MMServerManager", user="postgres", password=os.getenv('PASSWORD'), host="localhost") as DBConnection:
+    with DBConnection.cursor() as DBCursor:
         DBCursor.execute("""
             CREATE TABLE ServerUsers (
                 UserID INTEGER PRIMARY KEY,
