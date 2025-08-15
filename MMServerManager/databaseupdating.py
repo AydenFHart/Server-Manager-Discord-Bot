@@ -45,8 +45,6 @@ def DBConnectionManager(func):
             return(result)
     return wrapper
 
-#DBConnection = psycopg.connect(dbname="MMServerManager", user="postgres", password=os.getenv('PASSWORD'), host="locahost")
-
 @DBConnectionManager
 def UpdateActiveLastFromMessageSent(DBConnection, Message) -> None:
     """
@@ -80,3 +78,4 @@ def UpdateActiveLastFromMessageSent(DBConnection, Message) -> None:
     #DBConnection.cursor.execute("""UPDATE ServerUsers""")
     #print(MessageDatetime)
     return
+
