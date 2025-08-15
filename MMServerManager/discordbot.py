@@ -6,8 +6,10 @@ from discord.ext import commands
 import os
 from dotenv import load_dotenv; load_dotenv('MMServerManager/bot.env')
 
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', level=logging.DEBUG)
+
 
 """
 HELPFUL LINKS:
@@ -16,7 +18,7 @@ HELPFUL LINKS:
 """
 
 #***FUNCTION IMPORTS***
-from databaseUpdating import DBConnectionManager, UpdateActiveLastFromMessageSent
+from databaseUpdating import *
 
 MyGuild = discord.Object(id=1322211561938354186)
 class MMSMClient(discord.Client):
@@ -36,7 +38,21 @@ client = MMSMClient(intents=intents)
 
 @client.event
 async def on_ready():
-    print(f'logged in as {client.user} (ID: {client.user.id})')
+    logger.info(f'logged in as {client.user} (ID: {client.user.id})')
+    StartupTableCleaning()
+
+    guild = client.get_guild(1322211561938354186)
+    for member in guild.members:
+        if member.bot == True: continue
+        CreateServerUsersEntry(Member=member)
+    for role in guild.roles:
+        if role.is_bot_managed() == True or role.is_default() == True: continue
+        CreateServerRolesEntry(Role=role)
+
+@client.event
+async def on_member_join(member):
+    logger.info(f"{member.name} has joned the server.")
+    CreateServerUsersEntry(Member=member)
 
 @client.event
 async def on_message(message):

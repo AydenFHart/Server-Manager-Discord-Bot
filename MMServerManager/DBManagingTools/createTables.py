@@ -11,7 +11,7 @@ with psycopg.connect(dbname="MMServerManager", user="postgres", password=os.gete
                     Username TEXT,
                     LastActive TIMESTAMP)
             """)
-        except psycopg.errors.DuplicateTable: DBConnection.rollback()
+        except psycopg.errors.DuplicateTable: DBConnection.connection.rollback()
 
         """
         USERROLES TABLE
@@ -29,7 +29,7 @@ with psycopg.connect(dbname="MMServerManager", user="postgres", password=os.gete
                     UserID BIGINT PRIMARY KEY,
                     Roles BIGINT[])              
             """)
-        except psycopg.errors.DuplicateTable: DBConnection.rollback()
+        except psycopg.errors.DuplicateTable: DBConnection.connection.rollback()
 
         """
         TEMPORARYUSERROLES TABLE
@@ -47,4 +47,20 @@ with psycopg.connect(dbname="MMServerManager", user="postgres", password=os.gete
                     Expiration TIMESTAMP[]
                 )
             """)
-        except psycopg.errors.DuplicateTable: DBConnection.rollback()
+        except psycopg.errors.DuplicateTable: DBConnection.connection.rollback()
+
+        """
+        SERVERROLES TABLE
+            ROLEID: BIGINT PRIMARY KEY, ROLENAME: TEXT
+
+            ROLE ID: Discord id of the role.
+            ROLENAME: name of the role.
+        """
+        try:
+            DBCursor.execute("""
+                CREATE TABLE ServerRoles (
+                    RoleID BIGINT PRIMARY KEY,
+                    RoleName TEXT
+                )
+            """)
+        except psycopg.errors.DuplicateTable: DBConnection.connection.rollback()

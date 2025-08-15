@@ -7,7 +7,7 @@ from dotenv import load_dotenv; load_dotenv("MMServerManager/db.env")
 import logging
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', level=logging.DEBUG)
+#logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', level=logging.DEBUG)
 
 """
 Helpful Links
@@ -77,5 +77,73 @@ def UpdateActiveLastFromMessageSent(DBConnection, Message) -> None:
     #MessageDatetime = Message.created_at
     #DBConnection.cursor.execute("""UPDATE ServerUsers""")
     #print(MessageDatetime)
+    return 
+
+@DBConnectionManager
+def CreateServerUsersEntry(DBConnection, Member) -> None:
+    """
+    PURPOSE:
+        Creates a new ServerUsers entry for the provided member.
+        This allows for the server manager to operate its automated functionality.
+    """
+    DBQuery = ("""
+        SELECT UserID
+        FROM ServerUsers
+        WHERE UserID = %s
+    """)
+    DBConnection.cursor.execute(DBQuery, [Member.id])
+    if DBConnection.cursor.fetchone() == None:
+        logging.info(f"Creating entries for {str(Member.name)} in ServerUsers")
+        DBQuery = ("""
+            INSERT INTO ServerUsers (UserID, UserName, LastActive)
+            VALUES (%s,%s,%s)
+        """)
+        Values = [int(Member.id), str(Member.name), datetime.now()]
+        try:
+            DBConnection.cursor.execute(DBQuery, Values)
+            DBConnection.connection.commit()
+        except psycopg.errors as e:
+            logging.error(e)
+            DBConnection.connection.rollback()
     return
 
+@DBConnectionManager
+def CreateServerRolesEntry(DBConnection, Role) -> None:
+    """
+    PURPOSE:
+        Create an entry in the serverroles database table if it doesn't exist
+    """
+    
+    DBQuery = ("""
+        SELECT RoleID
+        FROM ServerRoles
+        WHERE RoleID = %s
+    """)
+    DBConnection.cursor.execute(DBQuery, [Role.id])
+    if DBConnection.cursor.fetchone() == None:
+        logging.info(f"Creating entries for {Role.name} in ServerRoles")
+        DBQuery = ("""
+            INSERT INTO ServerRoles (RoleID, RoleName)
+            Values (%s,%s)
+        """)
+        Values = [int(Role.id), str(Role.name)]
+        try:
+            DBConnection.cursor.execute(DBQuery, Values)
+            DBConnection.connection.commit()
+        except psycopg.errors as e:
+            logging.error(e)
+            DBConnection.connection.rollback()
+    return
+
+@DBConnectionManager
+def StartupTableCleaning(DBConnection) -> None:
+    """
+    PURPOSE:
+        Some tables should be dropped and rebuilt to check if the data is accurate
+
+        EX: can prevent old roles form being accounted for in commands
+    """
+    logging.info("Deleting entries in ServerRoles table.")
+    DBConnection.cursor.execute("DELETE FROM ServerRoles")
+
+    DBConnection.connection.commit()
