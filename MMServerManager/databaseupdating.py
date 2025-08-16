@@ -210,4 +210,18 @@ def GrantRole(DBConnection, User, RoleID) -> None:
     DBConnection.connection.commit()
     return
 
-
+@DBConnectionManager
+def GetUserRoles(DBConnection, User) -> list[int]:
+    """
+    PURPOSE:
+        Get the role id's that a user has from the database.
+    """
+    DBQuery = ("""
+        SELECT Roles
+        FROM UserRoles
+        WHERE UserID = %s
+    """)
+    DBConnection.cursor.execute(DBQuery, [User.id])
+    Roles = DBConnection.cursor.fetchone()
+    if Roles == None: return
+    return(Roles[0])

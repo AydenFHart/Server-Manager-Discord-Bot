@@ -44,6 +44,7 @@ async def on_ready():
     for member in guild.members:
         if member.bot == True: continue
         CreateServerUsersEntry(Member=member)
+        await UpdateUserRoles(User=member) #Updating member roles.
     for role in guild.roles:
         if role.is_bot_managed() == True or role.is_default() == True: continue
         CreateServerRolesEntry(Role=role)
@@ -113,8 +114,33 @@ async def grant_role(interaction: discord.Interaction, TargetUser: discord.Membe
                 await interaction.response.send_message(f"Role granted! {selection.values}", ephemeral=True)
             except Exception:
                 await interaction.response.send_message("User already has the role.", ephemeral=True, delete_after=5)
+            await UpdateUserRoles(User=TargetUser)
 
     await interaction.response.send_message(f"Select what role to give {TargetUser.name}.", view=RoleSelectView(), ephemeral=True, delete_after=15)
+
+async def UpdateUserRoles(User: discord.Member):
+    logger.debug(f"Updating roles for {User.name}")
+    Guild = client.get_guild(MyGuildID)
+    RoleIDs = GetUserRoles(User)
+
+    for CurrentRole in User.roles[1:]: #Removing roles a use should not have.
+        if RoleIDs != None:
+            if int(CurrentRole.id) not in RoleIDs:
+                logging.info(f"Removing {CurrentRole.name} from {User.name}")
+                await User.remove_roles(CurrentRole)
+        else:
+            logging.info(f"Removing {CurrentRole.name} from {User.name}")
+            await User.remove_roles(CurrentRole)
+
+
+    if RoleIDs == None: return
+    if RoleIDs[0] == None: return
+    
+    for RoleID in RoleIDs: #Adding roles a user is missing.
+        Role = Guild.get_role(int(RoleID))
+        if Role not in User.roles[1:]:
+            logging.info(f"Adding {Role.name} to {User.name}")
+            await User.add_roles(Role)
 
 if __name__ == '__main__':
     client.run(os.getenv('TOKEN'))
