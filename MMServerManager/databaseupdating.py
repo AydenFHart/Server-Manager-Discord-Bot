@@ -143,7 +143,71 @@ def StartupTableCleaning(DBConnection) -> None:
 
         EX: can prevent old roles form being accounted for in commands
     """
-    logging.info("Deleting entries in ServerRoles table.")
+    logging.info("Deleting entries in ServerRoles.")
     DBConnection.cursor.execute("DELETE FROM ServerRoles")
 
     DBConnection.connection.commit()
+
+@DBConnectionManager
+def FetchRoles(DBConnection) -> list[(str, int, str)]:
+    """
+    PURPOSE:
+        Populate the options for the give-role commands.
+
+    RETURNS:
+        A list containing lists with string, integer, and string
+        A list of roles, with the roles name, role id, and description (returned an an empty string)
+    """
+
+    logging.info("Populating role commands options list")
+    DBQuery = ("""
+        SELECT RoleName, RoleID
+        FROM ServerRoles
+    """)
+    DBConnection.cursor.execute(DBQuery)
+    return(DBConnection.cursor.fetchall())
+
+@DBConnectionManager
+def GrantRole(DBConnection, User, RoleID) -> None:
+    """
+    PURPOSE:
+        Update UserRoles table with the new role they have been granted (if they dont already have it)
+        Update the user's roles within the discord server based upon whats in the database.
+    """
+    
+    DBQuery = ("""
+        SELECT UserID
+        FROM UserRoles
+        WHERE UserID = %s
+    """)
+    DBConnection.cursor.execute(DBQuery, [User.id])
+    if DBConnection.cursor.fetchone() == None:
+        logging.info(f"Creating UserRoles entry for {User.name}.")
+        DBQuery = ("""
+            INSERT INTO UserRoles (UserID, Roles)
+            VALUES (%s, %s)
+        """)
+        DBConnection.cursor.execute(DBQuery, [User.id, []])
+        DBConnection.connection.commit()
+
+    DBQuery = ("""
+        SELECT Roles
+        FROM UserRoles
+        WHERE UserID = %s
+    """)
+    DBConnection.cursor.execute(DBQuery, [User.id])
+    UserRoles = DBConnection.cursor.fetchone()[0]
+    if RoleID in UserRoles: raise Exception("User already has role being added")
+
+    DBQuery = ("""
+        UPDATE UserRoles
+        SET Roles = %s
+        WHERE UserID = %s
+    """)
+    UserRoles.append(RoleID)
+    logging.info(f"Adding {RoleID} role to {User.name}")
+    DBConnection.cursor.execute(DBQuery, [UserRoles, User.id])
+    DBConnection.connection.commit()
+    return
+
+

@@ -6,10 +6,8 @@ from discord.ext import commands
 import os
 from dotenv import load_dotenv; load_dotenv('MMServerManager/bot.env')
 
-
 logger = logging.getLogger(__name__)
 logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', level=logging.DEBUG)
-
 
 """
 HELPFUL LINKS:
@@ -20,7 +18,8 @@ HELPFUL LINKS:
 #***FUNCTION IMPORTS***
 from databaseUpdating import *
 
-MyGuild = discord.Object(id=1322211561938354186)
+MyGuildID = 1322211561938354186
+MyGuild = discord.Object(id=MyGuildID)
 class MMSMClient(discord.Client):
     def __init__(self, *, intents: discord.Intents):
         super().__init__(intents=intents)
@@ -41,13 +40,16 @@ async def on_ready():
     logger.info(f'logged in as {client.user} (ID: {client.user.id})')
     StartupTableCleaning()
 
-    guild = client.get_guild(1322211561938354186)
+    guild = client.get_guild(MyGuildID)
     for member in guild.members:
         if member.bot == True: continue
         CreateServerUsersEntry(Member=member)
     for role in guild.roles:
         if role.is_bot_managed() == True or role.is_default() == True: continue
         CreateServerRolesEntry(Role=role)
+
+    for Role in FetchRoles():
+        RoleOptions.append(discord.SelectOption(label=str(Role[0]), value=int(Role[1]), description=''))
 
 @client.event
 async def on_member_join(member):
@@ -62,19 +64,57 @@ async def on_message(message):
     logger.debug(f"Message Recieved in {CategoryName} {message.channel.name}: {message.author} sent \'{message.content}\'")
     UpdateActiveLastFromMessageSent(Message=message)
 
+RoleOptions = []
+
+"""
 class TestViewButtons(ui.View):
-    def __init__(self, *, timeout = 180):
+
+    TargetUser:discord.member = None
+    def __init__(self, *, timeout = 15):
         super().__init__(timeout=timeout)
 
-    @ui.button(label="Test", style=discord.ButtonStyle.grey)
-    async def test_button(self, button: ui.Button, interaction:discord.Interaction):
-        await button.response.send_message("Hello world!", ephemeral=True)
 
-@client.tree.context_menu(name="Test Content Menu Command")
-async def test_context_menu_command(interaction: discord.Interaction, message: discord.Member):
-    #await interaction.response.send_message("Test Content Menu Command!", ephemeral=True)
-    TestView = TestViewButtons()
-    await interaction.response.send_message("This is a test!", view=TestView, ephemeral=True)
+    #@ui.button(label="Test", style=discord.ButtonStyle.grey)
+    #async def test_button(self, button: ui.Button, interaction:discord.Interaction):
+    #    await button.response.send_message("Hello world!", ephemeral=True)
+    #print(self.Member)
+"""
+
+
+"""@client.tree.context_menu(name="Test context!")
+async def test_context_menu_command(interaction: discord.Interaction, user: discord.Member):
+
+    class TestButtonView(ui.View):
+        def __init__(self, *, timeout = 15):
+            super().__init__(timeout=timeout)
+            
+        @ui.button(label="Test", style=discord.ButtonStyle.grey)
+        async def test_button(self, button: ui.Button, interaction: discord.Interaction):
+            await button.response.send_message(f"Hello world! {user.name}", ephemeral = True, delete_after = 15)
+
+    print(user.name)
+    #await interaction.response.send_message("This is a test!", view=TestViewButtons(), ephemeral=True, delete_after=15)
+    logging.debug("Context menu command used")
+    await interaction.response.send_message("This is a test!", view = TestButtonView(), ephemeral=True, delete_after=15)"""
+
+@client.tree.context_menu(name="Grant Role")
+async def grant_role(interaction: discord.Interaction, TargetUser: discord.Member):
+
+    class RoleSelectView(ui.View):
+        def __init__(self, *, timeout = 15):
+            super().__init__(timeout=timeout)
+
+        @ui.select(placeholder='Select a role to give...', options=RoleOptions)
+        async def selected_role(self, interaction: discord.Interaction, selection:discord.ui.Select):
+            
+            if TargetUser.bot == True: await interaction.response.send_message("You cannot give roles to a bot.", ephemeral=True, delete_after=5); return
+            try:
+                GrantRole(User=TargetUser, RoleID=int(selection.values[0]))
+                await interaction.response.send_message(f"Role granted! {selection.values}", ephemeral=True)
+            except Exception:
+                await interaction.response.send_message("User already has the role.", ephemeral=True, delete_after=5)
+
+    await interaction.response.send_message(f"Select what role to give {TargetUser.name}.", view=RoleSelectView(), ephemeral=True, delete_after=15)
 
 if __name__ == '__main__':
     client.run(os.getenv('TOKEN'))
