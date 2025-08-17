@@ -211,6 +211,51 @@ def GrantRole(DBConnection, User, RoleID) -> None:
     return
 
 @DBConnectionManager
+def GrantTemporaryRole(DBConnection, User, RoleID:int, ExpirationDatetime:datetime) -> None:
+    """
+    PURPOSE:
+        Update TemporaryUserRoles table with the new role they have been granted (if they dont already have it)
+        Update the user's roles within the discord server based upon whats in the database.
+    """
+    
+    DBQuery = ("""
+        SELECT UserID
+        FROM TemporaryUserRoles
+        WHERE UserID = %s
+    """)
+    DBConnection.cursor.execute(DBQuery, [User.id])
+    if DBConnection.cursor.fetchone() == None:
+        logging.info(f"Creating TemporaryUserRoles entry for {User.name}.")
+        DBQuery = ("""
+            INSERT INTO TemporaryUserRoles (UserID, Roles, Expiration)
+            VALUES (%s, %s, %s)
+        """)
+        DBConnection.cursor.execute(DBQuery, [User.id, [], []])
+        DBConnection.connection.commit()
+
+    DBQuery = ("""
+        SELECT Roles, Expiration
+        FROM TemporaryUserRoles
+        WHERE UserID = %s
+    """)
+    DBConnection.cursor.execute(DBQuery, [User.id])
+    PulledInfo = DBConnection.cursor.fetchone()
+    UserRoles, UserExpirations = PulledInfo[:2]
+    if RoleID in UserRoles: raise Exception("User already has role being added")
+
+    DBQuery = ("""
+        UPDATE TemporaryUserRoles
+        SET Roles = %s, Expiration = %s
+        WHERE UserID = %s
+    """)
+    UserRoles.append(RoleID)
+    UserExpirations.append(ExpirationDatetime)
+    logging.info(f"Adding {RoleID} temporary role to {User.name}")
+    DBConnection.cursor.execute(DBQuery, [UserRoles, UserExpirations, User.id])
+    DBConnection.connection.commit()
+    return
+
+@DBConnectionManager
 def GetUserRoles(DBConnection, User) -> list[int]:
     """
     PURPOSE:
@@ -225,3 +270,64 @@ def GetUserRoles(DBConnection, User) -> list[int]:
     Roles = DBConnection.cursor.fetchone()
     if Roles == None: return
     return(Roles[0])
+
+@DBConnectionManager
+def GetUserTemporaryRoles(DBConnection, User) -> list[int, datetime]:
+    """
+    PURPOSE:
+        Get the role ids and expiration times that a user has from the database.
+    """
+    DBQuery = ("""
+        SELECT Roles, Expiration
+        FROM TemporaryUserRoles
+        WHERE UserID = %s
+    """)
+    DBConnection.cursor.execute(DBQuery, [User.id])
+    PulledInfo = DBConnection.cursor.fetchone()
+    if PulledInfo == None: return
+    return(PulledInfo)
+
+@DBConnectionManager
+def RemoveExpiredUserTemporaryRoles(DBConnection, User) -> None:
+    """
+    PURPOSE:
+        Deleted expired user roles from temporaryuserroles
+    """
+    DBQuery = ("""
+        SELECT Roles, Expiration
+        FROM TemporaryUserRoles
+        WHERE UserID = %s
+    """)
+    DBConnection.cursor.execute(DBQuery, [User.id])
+    PulledInfo = DBConnection.cursor.fetchone()
+    if PulledInfo == None: return
+    RoleID, Expiration = PulledInfo[:2]
+
+    NonExpired:list[list[int], list[datetime]] = [[], []]
+    for Index, Datetime in enumerate(Expiration):
+        if Datetime > datetime.now():
+            NonExpired[0].append(RoleID[Index])
+            NonExpired[1].append(Expiration[Index])
+        else: logger.debug(f"Removed expired temporary role from {User.name}")
+
+    if len(NonExpired[0]) == 0: #They have no more valid roles and should have entry deleted from db.
+        DBQuery = ("""
+            DELETE
+            FROM TemporaryUserRoles
+            WHERE UserID = %s
+        """)
+        DBConnection.cursor.execute(DBQuery, [User.id])
+        DBConnection.connection.commit()
+    if RoleID == NonExpired[0]: return #There is not change, so no reason to perform actions on db.
+    else:
+        DBQuery = ("""
+            UPDATE TemporaryUserRoles
+            SET Roles = %s, Expiration = %s
+            WHERE UserID = %s
+        """)
+        DBConnection.cursor.execute(DBQuery, [NonExpired[0], NonExpired[1], User.id])
+        DBConnection.connection.commit()
+    return
+
+    
+

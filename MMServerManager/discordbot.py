@@ -1,7 +1,8 @@
 import discord
 import logging
 from discord import app_commands, ui
-from discord.ext import commands
+from discord.ext import tasks
+from datetime import timedelta
 
 import os
 from dotenv import load_dotenv; load_dotenv('MMServerManager/bot.env')
@@ -12,6 +13,7 @@ logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', level=loggin
 """
 HELPFUL LINKS:
     UI / Buttons: https://gist.github.com/lykn/bac99b06d45ff8eed34c2220d86b6bf4
+    Tasks: https://discordpy.readthedocs.io/en/stable/ext/tasks/
 
 """
 
@@ -69,7 +71,7 @@ RoleOptions = []
 
 @client.tree.context_menu(name="Grant Role")
 async def grant_role(interaction: discord.Interaction, TargetUser: discord.Member):
-    logger.info(f"{interaction.user.name} has used Grant Role")
+    logger.debug(f"{interaction.user.name} has used Grant Role")
 
     class RoleSelectView(ui.View):
         def __init__(self, *, timeout = 15):
@@ -81,10 +83,9 @@ async def grant_role(interaction: discord.Interaction, TargetUser: discord.Membe
 
             #***ADD A WAY TO ADD TRUSTED+ BEING ABLE TO ADD ANY ROLE TO ANYONE***
 
-            if TargetUser.bot == True: await subinteraction.response.send_message("You cannot give roles to a bot.", ephemeral=True, delete_after=5); return
-            #if discord.utils.get(interaction.user.roles, id=SelectionValue) == None:
-            #    await subinteraction.response.send_message("You must have the selected role to grant it to someone else", ephemeral=True, delete_after=15)
-            #    return
+            if TargetUser.bot == True:
+                await subinteraction.response.send_message("You cannot give roles to a bot.", ephemeral=True, delete_after=5)
+                return
             if await HasRolePermissions(User=interaction.user, Roles=[SelectionValue]) == False:
                 await subinteraction.response.send_message("You must have the selected role to grant it to someone else", ephemeral=True, delete_after=15)
                 return
@@ -102,6 +103,49 @@ async def grant_role(interaction: discord.Interaction, TargetUser: discord.Membe
     else: await interaction.response.send_message("You do not have the permissions to use this command.", ephemeral=True, delete_after=15)
 
 #***NEXT GOAL: ADD A COMMAND FOR MEMBERS TO USE THAT TEMPORARILY GIVES TRAGET USER ACESS TO GAME CATEGORY***
+@client.tree.context_menu(name="Grant Temporary Role")
+async def grant_temporary_role(interaction: discord.Interaction, TargetUser: discord.Member):
+    logger.debug(f"{interaction.user.name} has used Grant Temporary Role")
+
+    class RoleSelectView(ui.View):
+        def __init__(self, *, timeout = 15):
+            super().__init__(timeout=timeout)
+
+        @ui.select(placeholder='Select a role to give...', options=RoleOptions)
+        async def selected_role(self, subselectedroleinteraction: discord.Interaction, selection:discord.ui.Select):
+            SelectedRoleID = int(selection.values[0])
+            class ExpirationSelectView(ui.View):
+                def __init__(self, *, timeout = 15):
+                    super().__init__(timeout=timeout)
+
+                TimeOptions = [
+                    discord.SelectOption(label='30m', value=0, description='Grant this role temporarily for 30s minutes.'),
+                    discord.SelectOption(label='1hr', value=1, description='Grant this role temporarily for 1 hour.'),
+                    discord.SelectOption(label='2hr', value=2, description='Grant this role temporarily for 2 hours.')
+                ]
+                @ui.select(placeholder='Select how long to give this role for', options=TimeOptions)
+                async def selected_expiration(self, subselectedexpirationinteraction: discord.Interaction, selection:discord.ui.Select):
+                    ExpirationTimes = [
+                        datetime.now() + timedelta(minutes=30),
+                        datetime.now() + timedelta(hours=1),
+                        datetime.now() + timedelta(hours=2)
+                    ]
+                    SelectedExpirationTime = ExpirationTimes[int(selection.values[0])]
+                    try:
+                        GrantTemporaryRole(TargetUser, SelectedRoleID, SelectedExpirationTime)
+                        UpdateUserRoles(TargetUser)
+                        await subselectedexpirationinteraction.response.send_message(f"Expiration selected {SelectedRoleID, SelectedExpirationTime}", ephemeral=True, delete_after=15)
+                    except Exception:
+                        await subselectedexpirationinteraction.response.send_message("User already has the selected role.")
+        
+            await subselectedroleinteraction.response.send_message("Role selected, select expiration time", view=ExpirationSelectView(), ephemeral=True, delete_after=15)
+
+    if await HasRolePermissions(User=interaction.user, Roles=["Member"]) == True: #Must be trusted to give permanent roles.
+        await interaction.response.send_message(f"Select what role to give {TargetUser.name}.", view=RoleSelectView(), ephemeral=True, delete_after=15); return
+    else: await interaction.response.send_message("You do not have the permissions to use this command.", ephemeral=True, delete_after=15)
+
+#***NEXT GOAL: ADD A WAY FOR THE BOT TO CHECK IF TEMPORARY ROLE HAS EXPIRED***
+#@tasks.loop(minutes=5)
 
 #***NEXT GOAL: ADD A COMMAND TO REMOVE ROLES FROM A MEMBER***
 
@@ -148,7 +192,15 @@ async def UpdateUserRoles(User: discord.Member) -> None:
     """
     logger.debug(f"Updating roles for {User.name}")
     Guild = client.get_guild(MyGuildID)
+    RemoveExpiredUserTemporaryRoles(User)
     RoleIDs = GetUserRoles(User)
+    
+    TemporaryTuple = GetUserTemporaryRoles(User)
+    if TemporaryTuple != None:
+        TemporaryRoleIDs, Expirations = TemporaryTuple[:2]
+        if RoleIDs != None:
+            for TempRoleID in TemporaryRoleIDs: RoleIDs.append(TempRoleID)
+        else: RoleIDs = TemporaryRoleIDs
 
     for CurrentRole in User.roles[1:]: #Removing roles a use should not have.
         if RoleIDs != None:
