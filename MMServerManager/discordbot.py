@@ -67,37 +67,6 @@ async def on_message(message):
 
 RoleOptions = []
 
-"""
-class TestViewButtons(ui.View):
-
-    TargetUser:discord.member = None
-    def __init__(self, *, timeout = 15):
-        super().__init__(timeout=timeout)
-
-
-    #@ui.button(label="Test", style=discord.ButtonStyle.grey)
-    #async def test_button(self, button: ui.Button, interaction:discord.Interaction):
-    #    await button.response.send_message("Hello world!", ephemeral=True)
-    #print(self.Member)
-"""
-
-
-"""@client.tree.context_menu(name="Test context!")
-async def test_context_menu_command(interaction: discord.Interaction, user: discord.Member):
-
-    class TestButtonView(ui.View):
-        def __init__(self, *, timeout = 15):
-            super().__init__(timeout=timeout)
-            
-        @ui.button(label="Test", style=discord.ButtonStyle.grey)
-        async def test_button(self, button: ui.Button, interaction: discord.Interaction):
-            await button.response.send_message(f"Hello world! {user.name}", ephemeral = True, delete_after = 15)
-
-    print(user.name)
-    #await interaction.response.send_message("This is a test!", view=TestViewButtons(), ephemeral=True, delete_after=15)
-    logging.debug("Context menu command used")
-    await interaction.response.send_message("This is a test!", view = TestButtonView(), ephemeral=True, delete_after=15)"""
-
 @client.tree.context_menu(name="Grant Role")
 async def grant_role(interaction: discord.Interaction, TargetUser: discord.Member):
 
@@ -106,17 +75,29 @@ async def grant_role(interaction: discord.Interaction, TargetUser: discord.Membe
             super().__init__(timeout=timeout)
 
         @ui.select(placeholder='Select a role to give...', options=RoleOptions)
-        async def selected_role(self, interaction: discord.Interaction, selection:discord.ui.Select):
+        async def selected_role(self, subinteraction: discord.Interaction, selection:discord.ui.Select):
             
-            if TargetUser.bot == True: await interaction.response.send_message("You cannot give roles to a bot.", ephemeral=True, delete_after=5); return
+            if TargetUser.bot == True: await subinteraction.response.send_message("You cannot give roles to a bot.", ephemeral=True, delete_after=5); return
+            if discord.utils.get(interaction.user.roles, id=int(selection.values[0])) == None:
+                await subinteraction.response.send_message("You must have the selected role to grant it to someone else", ephemeral=True, delete_after=15)
+                return
+            
             try:
                 GrantRole(User=TargetUser, RoleID=int(selection.values[0]))
-                await interaction.response.send_message(f"Role granted! {selection.values}", ephemeral=True)
+                await subinteraction.response.send_message(f"Role granted! {selection.values}", ephemeral=True)
             except Exception:
-                await interaction.response.send_message("User already has the role.", ephemeral=True, delete_after=5)
+                await subinteraction.response.send_message("User already has the role.", ephemeral=True, delete_after=5)
             await UpdateUserRoles(User=TargetUser)
 
-    await interaction.response.send_message(f"Select what role to give {TargetUser.name}.", view=RoleSelectView(), ephemeral=True, delete_after=15)
+    if discord.utils.get(interaction.user.roles, name = "Trusted") != None: #Must be trusted to give permanent roles.
+        await interaction.response.send_message(f"Select what role to give {TargetUser.name}.", view=RoleSelectView(), ephemeral=True, delete_after=15)
+    else: await interaction.response.send_message("You do not have the permissions to use this command.", ephemeral=True, delete_after=15)
+
+#***NEXT GOAL: ADD A COMMAND FOR MEMBERS TO USE THAT TEMPORARILY GIVES TRAGET USER ACESS TO GAME CATEGORY***
+
+#***NEXT GOAL: ADD A COMMAND TO REMOVE ROLES FROM A MEMBER***
+
+#***NEXT GOAL: ADD A COMMAND TO REFRESH ROLES FOR A USER / ALL USERS***
 
 async def UpdateUserRoles(User: discord.Member):
     logger.debug(f"Updating roles for {User.name}")
@@ -131,7 +112,6 @@ async def UpdateUserRoles(User: discord.Member):
         else:
             logging.info(f"Removing {CurrentRole.name} from {User.name}")
             await User.remove_roles(CurrentRole)
-
 
     if RoleIDs == None: return
     if RoleIDs[0] == None: return
