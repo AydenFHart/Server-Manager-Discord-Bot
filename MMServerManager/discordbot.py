@@ -69,6 +69,7 @@ RoleOptions = []
 
 @client.tree.context_menu(name="Grant Role")
 async def grant_role(interaction: discord.Interaction, TargetUser: discord.Member):
+    logger.info(f"{interaction.user.name} has used Grant Role")
 
     class RoleSelectView(ui.View):
         def __init__(self, *, timeout = 15):
@@ -76,30 +77,75 @@ async def grant_role(interaction: discord.Interaction, TargetUser: discord.Membe
 
         @ui.select(placeholder='Select a role to give...', options=RoleOptions)
         async def selected_role(self, subinteraction: discord.Interaction, selection:discord.ui.Select):
-            
+            SelectionValue = int(selection.values[0])
+
+            #***ADD A WAY TO ADD TRUSTED+ BEING ABLE TO ADD ANY ROLE TO ANYONE***
+
             if TargetUser.bot == True: await subinteraction.response.send_message("You cannot give roles to a bot.", ephemeral=True, delete_after=5); return
-            if discord.utils.get(interaction.user.roles, id=int(selection.values[0])) == None:
+            #if discord.utils.get(interaction.user.roles, id=SelectionValue) == None:
+            #    await subinteraction.response.send_message("You must have the selected role to grant it to someone else", ephemeral=True, delete_after=15)
+            #    return
+            if await HasRolePermissions(User=interaction.user, Roles=[SelectionValue]) == False:
                 await subinteraction.response.send_message("You must have the selected role to grant it to someone else", ephemeral=True, delete_after=15)
                 return
             
             try:
-                GrantRole(User=TargetUser, RoleID=int(selection.values[0]))
+                GrantRole(User=TargetUser, RoleID=SelectionValue)
                 await subinteraction.response.send_message(f"Role granted! {selection.values}", ephemeral=True)
             except Exception:
                 await subinteraction.response.send_message("User already has the role.", ephemeral=True, delete_after=5)
             await UpdateUserRoles(User=TargetUser)
 
-    if discord.utils.get(interaction.user.roles, name = "Trusted") != None: #Must be trusted to give permanent roles.
-        await interaction.response.send_message(f"Select what role to give {TargetUser.name}.", view=RoleSelectView(), ephemeral=True, delete_after=15)
+
+    if await HasRolePermissions(User=interaction.user, Roles=["Trusted"]) == True: #Must be trusted to give permanent roles.
+        await interaction.response.send_message(f"Select what role to give {TargetUser.name}.", view=RoleSelectView(), ephemeral=True, delete_after=15); return
     else: await interaction.response.send_message("You do not have the permissions to use this command.", ephemeral=True, delete_after=15)
 
 #***NEXT GOAL: ADD A COMMAND FOR MEMBERS TO USE THAT TEMPORARILY GIVES TRAGET USER ACESS TO GAME CATEGORY***
 
 #***NEXT GOAL: ADD A COMMAND TO REMOVE ROLES FROM A MEMBER***
 
-#***NEXT GOAL: ADD A COMMAND TO REFRESH ROLES FOR A USER / ALL USERS***
+@client.tree.command(
+        name="refresh_user_roles",
+        description="Updates all users role.")
+async def update_roles(interaction: discord.Interaction):
+    logger.info(f"{interaction.user.name} has used refresh user roles")
+    if HasRolePermissions(User=interaction.user, Roles=['Member']) == False:
+        await interaction.response.send_message("You are missing the roles for to use this command", ephemeral=True, delete_after=15)
+        return
+    guild = client.get_guild(MyGuildID)
+    for member in guild.members:
+        if member.bot == True: continue
+        CreateServerUsersEntry(Member=member)
+        await UpdateUserRoles(User=member) #Updating member roles.
+    await interaction.response.send_message("Roles for all users have been updated", ephemeral=True)
 
-async def UpdateUserRoles(User: discord.Member):
+async def HasRolePermissions(User:discord.Member, Roles:list) -> bool:
+    #i don't know if this needs to be async def'd?
+    """
+    PURPOSE:
+        Check if a user has all roles provided in RoleIDs list.
+        If they do not have all roles, return false.
+        If they have all roles, return true.
+
+    RETURNS:
+        A boolean value if the user has all the roles or not
+    """
+    for Role in Roles:
+        if isinstance(Role, int):
+            if discord.utils.get(User.roles[1:], id=int(Role)) == None: return(False)
+        elif isinstance(Role, str):
+            if discord.utils.get(User.roles[1:], name=str(Role)) == None: return(False)
+        else:
+            logger.error("Provided role identifier is not a string or int")
+            raise Exception("Provided role identifier is not a string or int")
+    return(True) #User must have all roles provided for a true return
+
+async def UpdateUserRoles(User: discord.Member) -> None:
+    """
+    PURPOSE:
+        Update the provided user's roles in the discord server from information in database.
+    """
     logger.debug(f"Updating roles for {User.name}")
     Guild = client.get_guild(MyGuildID)
     RoleIDs = GetUserRoles(User)
