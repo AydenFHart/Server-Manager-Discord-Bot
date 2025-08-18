@@ -329,5 +329,16 @@ def RemoveExpiredUserTemporaryRoles(DBConnection, User) -> None:
         DBConnection.connection.commit()
     return
 
-    
-
+@DBConnectionManager
+def FetchTemporaryRoleUserIDs(DBConnection) -> list[int]:
+    """
+    PURPOSE:
+        Find the user id's of any users who have temporary roles.
+    """
+    DBQuery = ("""
+        SELECT UserID
+        FROM TemporaryUserRoles
+    """)
+    DBConnection.cursor.execute(DBQuery)
+    UserIDList = [i[0] for i in DBConnection.cursor.fetchall()]
+    return(UserIDList)

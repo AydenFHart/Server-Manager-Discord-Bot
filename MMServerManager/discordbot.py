@@ -54,6 +54,8 @@ async def on_ready():
     for Role in FetchRoles():
         RoleOptions.append(discord.SelectOption(label=str(Role[0]), value=int(Role[1]), description=''))
 
+    await check_temporary_role_expirations.start()
+
 @client.event
 async def on_member_join(member):
     logger.info(f"{member.name} has joned the server.")
@@ -144,8 +146,14 @@ async def grant_temporary_role(interaction: discord.Interaction, TargetUser: dis
         await interaction.response.send_message(f"Select what role to give {TargetUser.name}.", view=RoleSelectView(), ephemeral=True, delete_after=15); return
     else: await interaction.response.send_message("You do not have the permissions to use this command.", ephemeral=True, delete_after=15)
 
-#***NEXT GOAL: ADD A WAY FOR THE BOT TO CHECK IF TEMPORARY ROLE HAS EXPIRED***
-#@tasks.loop(minutes=5)
+@tasks.loop(minutes=1)
+async def check_temporary_role_expirations():
+    logger.debug("Check temporary role expirations has ran")
+    UserIDs = FetchTemporaryRoleUserIDs()
+    guild = client.get_guild(MyGuildID)
+    for UserID in UserIDs:
+        Member = guild.get_member(UserID)
+        await UpdateUserRoles(User=Member)
 
 #***NEXT GOAL: ADD A COMMAND TO REMOVE ROLES FROM A MEMBER***
 
