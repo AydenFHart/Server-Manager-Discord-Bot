@@ -8,7 +8,7 @@ import os
 from dotenv import load_dotenv; load_dotenv('MMServerManager/bot.env')
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', level=logging.DEBUG)
+logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', level=logging.INFO)
 
 """
 HELPFUL LINKS:
@@ -52,6 +52,7 @@ async def on_ready():
         CreateServerRolesEntry(Role=role)
 
     for Role in FetchRoles():
+        if Role[0] == "Trusted": continue #***THIS IS TEMPORARY TILL I ADD A TRUSTED+/ADMIN ROLE.***
         RoleOptions.append(discord.SelectOption(label=str(Role[0]), value=int(Role[1]), description=''))
 
     await check_temporary_role_expirations.start()
@@ -88,7 +89,7 @@ async def grant_role(interaction: discord.Interaction, TargetUser: discord.Membe
             if TargetUser.bot == True:
                 await subinteraction.response.send_message("You cannot give roles to a bot.", ephemeral=True, delete_after=5)
                 return
-            if await HasRolePermissions(User=interaction.user, Roles=[SelectionValue]) == False:
+            if await HasRolePermissions(User=interaction.user, Roles=[SelectionValue]) == False and await HasRolePermissions(User=interaction.user, Roles=["Trusted"]) == False:
                 await subinteraction.response.send_message("You must have the selected role to grant it to someone else", ephemeral=True, delete_after=15)
                 return
             
@@ -115,7 +116,7 @@ async def grant_temporary_role(interaction: discord.Interaction, TargetUser: dis
 
         @ui.select(placeholder='Select a role to give...', options=RoleOptions)
         async def selected_role(self, subselectedroleinteraction: discord.Interaction, selection:discord.ui.Select):
-            SelectedRoleID = int(selection.values[0])
+            SelectedRoleID = int(selection.values[0]) 
             class ExpirationSelectView(ui.View):
                 def __init__(self, *, timeout = 15):
                     super().__init__(timeout=timeout)
@@ -133,10 +134,13 @@ async def grant_temporary_role(interaction: discord.Interaction, TargetUser: dis
                         datetime.now() + timedelta(hours=2)
                     ]
                     SelectedExpirationTime = ExpirationTimes[int(selection.values[0])]
+                    if await HasRolePermissions(User=interaction.user, Roles=[SelectedRoleID]) == False and await HasRolePermissions(User=interaction.user, Roles=["Trusted"]) == False:
+                        await subselectedexpirationinteraction.response.send_message("You can not assign a role you yourself don't have.", ephemeral=True, delete_after=15)
+                        return
                     try:
                         GrantTemporaryRole(TargetUser, SelectedRoleID, SelectedExpirationTime)
-                        UpdateUserRoles(TargetUser)
-                        await subselectedexpirationinteraction.response.send_message(f"Expiration selected {SelectedRoleID, SelectedExpirationTime}", ephemeral=True, delete_after=15)
+                        await UpdateUserRoles(TargetUser)
+                        await subselectedexpirationinteraction.response.send_message(f"Role has been asigned to {TargetUser.name} expiring at {SelectedExpirationTime}", ephemeral=True)
                     except Exception:
                         await subselectedexpirationinteraction.response.send_message("User already has the selected role.")
         
@@ -146,7 +150,7 @@ async def grant_temporary_role(interaction: discord.Interaction, TargetUser: dis
         await interaction.response.send_message(f"Select what role to give {TargetUser.name}.", view=RoleSelectView(), ephemeral=True, delete_after=15); return
     else: await interaction.response.send_message("You do not have the permissions to use this command.", ephemeral=True, delete_after=15)
 
-@tasks.loop(minutes=1)
+@tasks.loop(minutes=5)
 async def check_temporary_role_expirations():
     logger.debug("Check temporary role expirations has ran")
     UserIDs = FetchTemporaryRoleUserIDs()
