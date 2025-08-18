@@ -92,12 +92,16 @@ async def grant_role(interaction: discord.Interaction, TargetUser: discord.Membe
             if await HasRolePermissions(User=interaction.user, Roles=[SelectionValue]) == False and await HasRolePermissions(User=interaction.user, Roles=["Trusted"]) == False:
                 await subinteraction.response.send_message("You must have the selected role to grant it to someone else", ephemeral=True, delete_after=15)
                 return
-            
+            if await HasRolePermissions(User=TargetUser, Roles=[SelectionValue]) == True:
+                await subinteraction.response.send_message("User already has the role.", ephemeral=True, delete_after=5)
+                return
+
             try:
                 GrantRole(User=TargetUser, RoleID=SelectionValue)
-                await subinteraction.response.send_message(f"Role granted! {selection.values}", ephemeral=True)
+                await subinteraction.response.send_message(f"Role granted! {SelectionValue}", ephemeral=True)
             except Exception:
                 await subinteraction.response.send_message("User already has the role.", ephemeral=True, delete_after=5)
+                return
             await UpdateUserRoles(User=TargetUser)
 
 
